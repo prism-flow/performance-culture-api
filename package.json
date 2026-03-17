@@ -1,0 +1,13 @@
+{
+  "name": "performance-culture-api",
+  "version": "1.0.0",
+  "description": "API intermediária Firebase para Performance Culture",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "firebase-admin": "^12.0.0"
+  }
+}
