@@ -1,64 +1,52 @@
 const express = require('express');
-const { initializeApp, cert } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
-
+const admin = require('firebase-admin');
 const app = express();
-app.use(express.json({ limit: '10mb' }));
 
-// Inicializa Firebase Admin com as credenciais do projeto
-initializeApp({
-  credential: cert({
-    projectId: process.env.FIREBASE_PROJECT_ID,
-    clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  }),
+app.use(express.json());
+
+// Inicializa Firebase Admin
+const serviceAccount = {
+  project_id: process.env.FIREBASE_PROJECT_ID,
+  client_email: process.env.FIREBASE_CLIENT_EMAIL,
+  private_key: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+};
+
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
 });
 
-const db = getFirestore();
+const db = admin.firestore();
 
-// Rota de saúde
+// Rota de status
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Performance Culture API rodando!' });
 });
 
-// Rota para salvar KPIs
-app.post('/importar-kpis', async (req, res) => {
+// Rota para receber KPIs do n8n
+app.post('/kpi', async (req, res) => {
   try {
-    const { records } = req.body;
-    if (!records) {
-      return res.status(400).json({ error: 'Campo records é obrigatório' });
+    const data = req.body;
+
+    if (!data.colaborador_id || !data.mes || !data.ano) {
+      return res.status(400).json({ error: 'Campos obrigatórios: colaborador_id, mes, ano' });
     }
 
-    const ref = db.collection('app').doc('state');
-    const snap = await ref.get();
+    const docId = `${data.colaborador_id}_${data.mes}_${data.ano}`;
+    const docRef = db.collection('kpi_lancamentos').doc(docId);
 
-    // Mescla os records novos com os existentes
-    const existing = snap.exists ? (snap.data().records || {}) : {};
-    const merged = { ...existing };
+    await docRef.set({
+      ...data,
+      atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
 
-    for (const [mesAno, colabs] of Object.entries(records)) {
-      if (!merged[mesAno]) merged[mesAno] = {};
-      for (const [colabId, kpis] of Object.entries(colabs)) {
-        merged[mesAno][colabId] = {
-          ...(merged[mesAno][colabId] || {}),
-          ...kpis
-        };
-      }
-    }
-
-    await ref.set({ records: merged }, { merge: true });
-
-    res.json({
-      status: 'sucesso',
-      mensagem: `KPIs importados com sucesso!`,
-      meses: Object.keys(records),
-      colaboradores: [...new Set(Object.values(records).flatMap(m => Object.keys(m)))]
-    });
+    res.json({ success: true, id: docId });
   } catch (err) {
-    console.error(err);
+    console.error('Erro ao salvar KPI:', err);
     res.status(500).json({ error: err.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`API rodando na porta ${PORT}`);
+});
