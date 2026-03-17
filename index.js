@@ -4,7 +4,6 @@ const app = express();
 
 app.use(express.json());
 
-// Inicializa Firebase Admin
 const serviceAccount = {
   project_id: process.env.FIREBASE_PROJECT_ID,
   client_email: process.env.FIREBASE_CLIENT_EMAIL,
@@ -17,12 +16,18 @@ admin.initializeApp({
 
 const db = admin.firestore();
 
-// Rota de status
+const MO = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
+
+function ckey(mes, ano) {
+  const idx = MO.findIndex(m => m.toLowerCase() === String(mes).toLowerCase());
+  if (idx === -1) return null;
+  return `${ano}-${idx + 1}`;
+}
+
 app.get('/', (req, res) => {
   res.json({ status: 'ok', message: 'Performance Culture API rodando!' });
 });
 
-// Rota para receber KPIs do n8n
 app.post('/kpi', async (req, res) => {
   try {
     const data = req.body;
@@ -31,15 +36,33 @@ app.post('/kpi', async (req, res) => {
       return res.status(400).json({ error: 'Campos obrigatórios: colaborador_id, mes, ano' });
     }
 
-    const docId = `${data.colaborador_id}_${data.mes}_${data.ano}`;
-    const docRef = db.collection('kpi_lancamentos').doc(docId);
+    const key = ckey(data.mes, data.ano);
+    if (!key) {
+      return res.status(400).json({ error: `Mes invalido: ${data.mes}` });
+    }
 
+    const kpiData = {};
+    const campos = ['ixc_qty','opa_qty','pabx_qty','opa_eval_pct','opa_avg','pabx_eval_pct','pabx_avg','resolucao','qualitativa','resolucao_n2','fcr','proj_completos','reinc_pf','reinc_pj','escal_n2','escal_analista','escal_tecnico','assiduidade'];
+    campos.forEach(campo => {
+      const val = data[campo];
+      if (val !== null && val !== undefined && val !== '') {
+        const num = parseFloat(val);
+        if (!isNaN(num)) kpiData[campo] = num;
+      }
+    });
+
+    const docRef = db.collection('app').doc('state');
     await docRef.set({
-      ...data,
-      atualizado_em: admin.firestore.FieldValue.serverTimestamp(),
+      records: {
+        [key]: {
+          [data.colaborador_id]: kpiData
+        }
+      }
     }, { merge: true });
 
-    res.json({ success: true, id: docId });
+    console.log(`KPI salvo: ${data.colaborador_id} - ${data.mes} ${data.ano} - chave ${key}`);
+    res.json({ success: true, key, colaborador: data.colaborador_id });
+
   } catch (err) {
     console.error('Erro ao salvar KPI:', err);
     res.status(500).json({ error: err.message });
