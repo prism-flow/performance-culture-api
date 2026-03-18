@@ -31,18 +31,23 @@ app.get('/', (req, res) => {
 app.post('/kpi', async (req, res) => {
   try {
     const data = req.body;
-
     if (!data.colaborador_id || !data.mes || !data.ano) {
       return res.status(400).json({ error: 'Campos obrigatórios: colaborador_id, mes, ano' });
     }
-
     const key = ckey(data.mes, data.ano);
-    if (!key) {
-      return res.status(400).json({ error: `Mes invalido: ${data.mes}` });
-    }
+    if (!key) return res.status(400).json({ error: `Mes invalido: ${data.mes}` });
 
     const kpiData = {};
-    const campos = ['ixc_qty','opa_qty','pabx_qty','opa_eval_pct','opa_avg','pabx_eval_pct','pabx_avg','resolucao','qualitativa','resolucao_n2','fcr','proj_completos','reinc_pf','reinc_pj','escal_n2','escal_analista','escal_tecnico','assiduidade'];
+    const campos = [
+      'ixc_qty','opa_qty','pabx_qty',
+      'opa_eval_pct','opa_avg',
+      'pabx_eval_pct','pabx_avg',
+      'resolucao','resolucao_n1','resolucao_n2',
+      'qualitativa','iqi','fcr',
+      'proj_completos','reinc_pf','reinc_pj',
+      'escal_n2','escal_analista','escal_tecnico',
+      'assiduidade'
+    ];
     campos.forEach(campo => {
       const val = data[campo];
       if (val !== null && val !== undefined && val !== '') {
@@ -53,16 +58,11 @@ app.post('/kpi', async (req, res) => {
 
     const docRef = db.collection('app').doc('state');
     await docRef.set({
-      records: {
-        [key]: {
-          [data.colaborador_id]: kpiData
-        }
-      }
+      records: { [key]: { [data.colaborador_id]: kpiData } }
     }, { merge: true });
 
     console.log(`KPI salvo: ${data.colaborador_id} - ${data.mes} ${data.ano} - chave ${key}`);
     res.json({ success: true, key, colaborador: data.colaborador_id });
-
   } catch (err) {
     console.error('Erro ao salvar KPI:', err);
     res.status(500).json({ error: err.message });
@@ -70,6 +70,4 @@ app.post('/kpi', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`API rodando na porta ${PORT}`);
-});
+app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
